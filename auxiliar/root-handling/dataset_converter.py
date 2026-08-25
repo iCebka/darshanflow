@@ -132,7 +132,13 @@ def load_xy_from_root(root_path, tree_name, target_col):
     data = rdf.AsNumpy([target_col] + feature_names)
 
     y = np.asarray(data[target_col]).astype(Y_DTYPE)
-    X = np.column_stack([np.asarray(data[c]) for c in feature_names]).astype(X_DTYPE)
+    # np.column_stack normally already returns a C order array, forced
+    # explicitly here anyway so this function carries the same guarantee
+    # as load_xy_from_csv, rather than relying on that being incidentally
+    # true of column_stack's current implementation.
+    X = np.ascontiguousarray(
+        np.column_stack([np.asarray(data[c]) for c in feature_names]).astype(X_DTYPE)
+    )
 
     print(f"  rows read     : {len(y)}")
 
@@ -164,7 +170,15 @@ def load_xy_from_csv(csv_file, target_col):
     if dropped:
         print(f"  dropped non numeric columns: {dropped}")
 
-    X = feature_df.to_numpy(dtype=X_DTYPE)
+    # pandas commonly returns a Fortran (column major) ordered array from
+    # to_numpy when every column shares the same dtype, since it stores
+    # same dtype columns internally as one column major block. Every
+    # downstream writer in this script assumes row major (C order) bytes,
+    # some rely on it implicitly (a reader computing a row's byte offset
+    # as row index times row size), so the array is forced into C order
+    # explicitly here rather than left to whatever pandas happened to
+    # produce internally.
+    X = np.ascontiguousarray(feature_df.to_numpy(dtype=X_DTYPE))
     feature_names = list(feature_df.columns)
 
     return X, y, feature_names
