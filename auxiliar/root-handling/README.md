@@ -57,5 +57,5 @@ data/
   feature names. This means `_compute_length()` in the Lazy dataset
   classes can read a small JSON instead of opening a multi-GB file just to
   ask its shape.
-- **CSV**: has no equivalent cheap shape lookup — row count requires
+- **CSV**: has no equivalent cheap shape lookup, row count requires
   either scanning the file once or trusting an external metadata source.
