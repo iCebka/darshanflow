@@ -1,0 +1,25 @@
+format: root
+strategy: eager
+model: M2
+batch_size: 64
+epochs: 1
+log_every: 200
+workers: [2]
+cpus_per_task: 32
+dataset_size: "1M"
+
+target_col: Label
+tree_name: tree
+root_threads: 0
+persistent_workers: false
+prefetch_factor: null
+
+slurm:
+  nodes: 1
+  time: "00:30:00"
+  qos: debug
+  account: m2845
+  constraint: cpu
+
+paths:
+  venv: /pscratch/sd/s/satt/sprints/myvenv
