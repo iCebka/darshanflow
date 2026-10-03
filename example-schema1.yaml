@@ -1,0 +1,245 @@
+schema_version: 1
+
+campaign:
+  name: example-campaign
+
+
+# ---------------------------------------------------------------------------
+# Workload
+# ---------------------------------------------------------------------------
+
+workload:
+  type: python
+  script: scripts/train.py
+
+
+# ---------------------------------------------------------------------------
+# Dataset
+# ---------------------------------------------------------------------------
+
+dataset:
+  format: hdf5
+  path: data/dataset.h5
+
+
+# ---------------------------------------------------------------------------
+# Fixed workload arguments
+#
+# This section is intentionally free-form.
+#
+# Every key is converted using:
+#
+#   key_name -> KEY_NAME -> --key-name
+#
+# Example:
+#
+#   batch_size: 64
+#
+# becomes conceptually:
+#
+#   BATCH_SIZE=64
+#   --batch-size "$BATCH_SIZE"
+#
+# Supported values in schema v1:
+#   string
+#   integer
+#   float
+#   boolean
+#
+# true  -> the CLI flag is present
+# false -> the CLI flag is omitted
+#
+# data_path and num_workers are reserved by DarshanFlow and must not
+# appear here.
+# ---------------------------------------------------------------------------
+
+experiment:
+  strategy: eager
+  model: M2
+  batch_size: 64
+  epochs: 1
+  log_every: 500
+  persistent_workers: true
+
+
+# ---------------------------------------------------------------------------
+# Sweep dimensions
+#
+# Schema v1 supports only num_workers.
+# If num_workers is absent, the workload is executed once without passing
+# --num-workers.
+# ---------------------------------------------------------------------------
+
+sweep:
+  num_workers:
+    - 1
+    - 2
+    - 4
+    - 8
+
+
+# ---------------------------------------------------------------------------
+# Environment
+#
+# setup_commands are intentionally raw shell commands. They are an escape
+# hatch for machine/site-specific setup that DarshanFlow cannot model yet.
+#
+# Target-specific setup commands run first, then the virtual environment
+# is activated, then variables are exported.
+# ---------------------------------------------------------------------------
+
+environment:
+
+  # Optional virtual environment.
+  # If null or omitted, no virtual environment is activated.
+  # Example: venv: /path/to/venv
+  venv: null
+
+  # Optional environment variables exported before running the workload.
+  # If empty or omitted, no additional variables are exported.
+  # Example:     
+  #  OMP_NUM_THREADS: 4
+  #  MKL_NUM_THREADS: 4
+  #  OPENBLAS_NUM_THREADS: 4
+  #  NUMEXPR_NUM_THREADS: 4
+  variables: {}
+
+  # Optional target-specific shell setup.
+  # Commands are inserted verbatim into the generated launcher.
+  # If empty or omitted, no setup commands are added.
+  # Example: 
+  #    - export ATLAS_LOCAL_ROOT_BASE=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase
+  #    - source ${ATLAS_LOCAL_ROOT_BASE}/user/atlasLocalSetup.sh
+  #    - lsetup prmon
+  #    - asetup Athena,main--dev3LCG,latest
+  setup:
+    local: []
+    slurm: []
+
+  # Optional Python modules imported before execution as a sanity check.
+  # These do not affect the workload itself.
+  # They are only used to verify which Python packages and installations
+  # are actually visible in the generated execution environment.
+  # Example:
+  #  - torch
+  #  - h5py
+  sanity_imports: []
+
+
+# ---------------------------------------------------------------------------
+# Darshan instrumentation
+# ---------------------------------------------------------------------------
+
+darshan:
+  enabled: true
+
+  library: /path/to/libdarshan.so
+
+  nonmpi: true
+  dxt: true
+
+  config:
+    mode: generated
+    path: darshan_env.conf
+
+    max_records:
+      POSIX: 5000
+      DXT_POSIX: 325520
+
+    name_exclude:
+      - '\.pyc$'
+      - '^/cvmfs'
+      - '^/lib64'
+      - '^/lib'
+      - '^/gpfs/'
+      - '^/work2'
+      - '^/tmp'
+      - '^/dev'
+      - '^/scratch1'
+
+    name_include: []
+
+    modmem: 100
+
+    app_exclude:
+      - git
+      - ls
+      - sh
+      - hostname
+      - sed
+      - g++
+      - date
+      - cc1plus
+      - cat
+      - which
+      - tar
+      - ld
+      - prmon
+      - uname
+      - ps
+      - rm
+      - tee
+      - srun
+
+    app_include:
+      - python
+
+    rank_exclude: []
+    rank_include: []
+
+    dxt_small_io_trigger: 0.01
+
+    dump_config: true
+
+
+# ---------------------------------------------------------------------------
+# Execution backends
+# ---------------------------------------------------------------------------
+
+execution:
+
+  local:
+    enabled: true
+
+  slurm:
+    enabled: true
+
+    nodes: 1
+    cpus_per_task: 32
+    time: "02:00:00"
+
+    constraint: cpu
+    qos: regular
+    account: m2845
+
+
+# ---------------------------------------------------------------------------
+# Post-experiment analysis defaults
+# ---------------------------------------------------------------------------
+
+analysis:
+
+  metrics:
+
+    io:
+      enabled: true
+
+    access:
+      enabled: true
+
+    metadata:
+      enabled: true
+
+    bandwidth:
+      enabled: true
+
+    balance:
+      enabled: true
+
+  graphs:
+
+    compact:
+      enabled: true
+
+    individual:
+      enabled: false
