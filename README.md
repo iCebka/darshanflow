@@ -618,3 +618,170 @@ Here is the status of the directory of the described example at the end of the l
 
 18 directories, 46 files
 ```
+
+## Troubleshooting
+
+DarshanFlow is still under active development. When a campaign fails, first determine whether the problem happened during the build, workload execution, Darshan instrumentation, or post-processing. A run directory keeps the configuration snapshot, launcher, workload output, raw Darshan logs, and analysis output, so most problems can be investigated without modifying generated files.
+
+### PyDarshan and `libdarshan-util` version mismatch
+
+During JSON conversion, analysis may fail with an error similar to:
+
+```text
+FAILED: JSON conversion of <log>.darshan failed with exit code 1:
+darshan.discover_darshan.DarshanVersionError:
+This version of PyDarshan requires lib 3.4.6.
+```
+
+This error comes from the analysis environment. PyDarshan requires a compatible version of `libdarshan-util` and refuses to load a different one.
+
+This is separate from `darshan.library` in `campaign.yaml`, which selects the Darshan runtime library preloaded while the workload is executed. Changing that runtime path is therefore not the first fix for this error.
+
+Check the environment in which `analyze` is running:
+
+```bash
+python3 -c 'import darshan; print(darshan.__darshanutil_version__)'
+which darshan-parser
+```
+
+If the environment exposes a different Darshan installation, activate the intended virtual environment or adjust the relevant `PATH` / `LD_LIBRARY_PATH` settings so that PyDarshan and `libdarshan-util` come from compatible installations. Then rerun `analyze`; the raw `.darshan` files do not need to be regenerated.
+
+Automatic handling of multiple Darshan analysis-library versions is not implemented yet.
+
+### `run` cannot find a build, or the build became stale
+
+DarshanFlow identifies a build from the exact contents of `campaign.yaml`. Even changing a comment changes the expected build ID.
+
+If `campaign.yaml` has changed since the last build, generate a new launcher bundle:
+
+```bash
+python3 cli.py build my-campaign --target slurm
+```
+
+or:
+
+```bash
+python3 cli.py build my-campaign --target local
+```
+
+The requested execution target must also be enabled in `campaign.yaml`.
+
+Before submitting again, `--dry-run` can be used to check which launcher DarshanFlow resolves:
+
+```bash
+python3 cli.py run my-campaign --target slurm --dry-run
+```
+
+Do not repair this by editing files under `launchers/`. Generated launchers are snapshots of the campaign configuration and should be rebuilt from the YAML.
+
+### The Slurm job was submitted, but the run is incomplete
+
+`run --target slurm` stops after `sbatch` accepts the job. It does not wait for the allocation or track whether the workload eventually succeeds.
+
+If analysis reports an incomplete run, first check the scheduler state and wait until the job has finished. Then inspect the output produced by the workload:
+
+```text
+runs/<RUN_ID>/logs/<case>.txt
+```
+
+and the scheduler output, for example:
+
+```text
+slurm-<JOB_ID>.out
+```
+
+A successful `sbatch` submission only means that Slurm accepted the job. It does not mean that the workload completed successfully.
+
+### The workload ran, but no Darshan logs were produced
+
+For each case, raw logs should appear under:
+
+```text
+runs/<RUN_ID>/darshan_logs/<case>/
+```
+
+If the directory is empty, start with the corresponding workload log:
+
+```text
+runs/<RUN_ID>/logs/<case>.txt
+```
+
+A Python exception, missing dataset, invalid environment setup, or failed library preload can stop the workload before a usable Darshan log is written.
+
+If the workload itself completed, inspect the run's `launcher.sh`, `config.yaml`, and `darshan_env.conf`. In particular, verify that the configured `darshan.library` exists on the execution node, that Darshan instrumentation is enabled, and that non-MPI instrumentation is enabled for Python workloads.
+
+Application filters can also remove the processes that were meant to be instrumented. Check `app_include` and `app_exclude` if the program runs normally but no expected Python logs appear.
+
+### Darshan logs exist, but expected records are missing
+
+A `.darshan` file does not guarantee that every file accessed by the workload was retained.
+
+After analysis, inspect:
+
+```text
+runs/<RUN_ID>/analysis/<case>/checks/
+```
+
+and:
+
+```text
+runs/<RUN_ID>/analysis/<case>/simplified.json
+```
+
+The simplification stage reports which parent and worker records were retained. If the target dataset is missing, compare its path with the configured `name_include` and `name_exclude` expressions and check the application filters as well.
+
+Record limits may also matter for Python workloads that touch many files. Review `config.max_records` and `modmem` when Darshan reports exhausted record or module memory.
+
+If DXT data is expected, also confirm that DXT was enabled when the experiment was executed.
+
+Changes to instrumentation settings require a new build and a new run. Post-processing cannot recover records that were not collected by Darshan.
+
+### More `.darshan` files than expected
+
+One experimental case does not necessarily correspond to one Darshan file.
+
+With multiprocessing data loaders, the parent Python process and worker processes can be instrumented independently. A case such as:
+
+```text
+workers_32
+```
+
+may therefore contain many `.darshan` files.
+
+This is expected. DarshanFlow combines the records during simplification and identifies parent and worker processes before computing the metrics. An unexpectedly large number of unrelated logs, however, may indicate that `app_include` / `app_exclude` is too permissive.
+
+### Metrics or plots requested from the CLI are missing
+
+`analyze` uses the `config.yaml` stored inside the run, not the current `campaign.yaml`.
+
+The CLI options can restrict what was enabled in that snapshot, but they cannot enable analysis modes that were disabled when the run was created. For example:
+
+```bash
+python3 cli.py analyze my-campaign --run latest --graphs all
+```
+
+does not override a run whose stored configuration disabled those graph modes.
+
+Inspect:
+
+```text
+runs/<RUN_ID>/config.yaml
+```
+
+to see the analysis configuration associated with that run.
+
+Graph generation also requires Matplotlib. `compact` and `individual` are separate graph modes; enabling compact output alone does not produce the individual `io` plots.
+
+### The launcher reports success even though the workload failed
+
+Current launchers pipe workload output through `tee`. In some cases, the status returned by that pipeline can hide a non-zero exit status from the workload itself.
+
+If a case appears successful but its outputs are missing or incomplete, inspect:
+
+```text
+runs/<RUN_ID>/logs/<case>.txt
+```
+
+for the original workload error. Until pipeline exit propagation is tightened in the launcher, a successful launcher status should not be used by itself as proof that the training script completed correctly.
+
+*If a failure is not covered here, please open an issue with the command that was executed, the reported error, the run's `config.yaml`, and the relevant `logs/<case>.txt` output. For analysis failures, include the corresponding `analysis/<case>/checks/` output when available.*
