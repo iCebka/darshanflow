@@ -108,6 +108,11 @@ def mask(v):
     return 0 if v == INVALID else v
 
 
+def mask_float(v):
+    """-1 -> 0.0 for floating-point counters."""
+    return 0.0 if v == INVALID else float(v or 0.0)
+
+
 def parse_bool(value):
     """
     argparse boolean parser.
@@ -180,12 +185,12 @@ def file_row(log: dict, rec: dict) -> dict:
             c.get("POSIX_MAX_BYTE_READ", 0)
         ),
 
-        "read_time": fc.get(
-            "POSIX_F_READ_TIME", 0.0
+        "read_time": mask_float(
+            fc.get("POSIX_F_READ_TIME", 0.0)
         ),
 
-        "meta_time": fc.get(
-            "POSIX_F_META_TIME", 0.0
+        "meta_time": mask_float(
+            fc.get("POSIX_F_META_TIME", 0.0)
         ),
 
         "hist_total": tot,

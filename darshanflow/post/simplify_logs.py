@@ -39,23 +39,92 @@ SCHEMA = "darshan-simplified/1"
 
 # Experiment coordinates are parsed from the command line Darshan recorded,
 # not from the directory name, so a renamed directory cannot mislabel a run.
+#
+# The campaign used copied training scripts such as:
+#   root_tr.py, root_tr_113.py
+#   npz_tr.py,  npz_tr_106.py
+#   h5_tr.py,   h5_tr_101.py
+#
+# The numeric suffix is provenance (which copied script launched the run), not
+# an experimental factor.  It is therefore stored separately as
+# ``script_variant`` while ``fmt`` is canonicalised to root / npz / hdf5.
 EXE_ARGS = {
-    "fmt": r"(\w+)_tr\.py",
-    "strategy": r"--strategy[= ]+(\S+)",
-    "model": r"--model[= ]+(\S+)",
-    "workers": r"--num-workers[= ]+(\d+)",
-    "epochs": r"--epochs[= ]+(\d+)",
-    "batch": r"--batch-size[= ]+(\d+)",
-    "data_path": r"--data-path[= ]+(\S+)",
+    "strategy": r"--strategy(?:=|\s+)(\S+)",
+    "model": r"--model(?:=|\s+)(\S+)",
+    "workers": r"--num-workers(?:=|\s+)(\d+)",
+    "epochs": r"--epochs(?:=|\s+)(\d+)",
+    "batch": r"--batch-size(?:=|\s+)(\d+)",
+    "data_path": r"--data-path(?:=|\s+)(\S+)",
+    "batches_in_memory": r"--(?:batches-in-memory|bim)(?:=|\s+)(\d+)",
+    "block_rows": r"--block-rows(?:=|\s+)(\S+)",
+    "prefetch_factor": r"--prefetch-factor(?:=|\s+)(\d+)",
+    "log_every": r"--log-every(?:=|\s+)(\d+)",
+    "seed": r"--seed(?:=|\s+)(\d+)",
+    "device": r"--device(?:=|\s+)(\S+)",
+    "tree_name": r"--tree-name(?:=|\s+)(\S+)",
+    "target_col": r"--target-col(?:=|\s+)(\S+)",
+    "torch_num_threads": r"--torch-num-threads(?:=|\s+)(\d+)",
+    "torch_interop_threads": r"--torch-interop-threads(?:=|\s+)(\d+)",
 }
 
 
+SCRIPT_RE = re.compile(
+    r"(?:^|\s)(?:\S*/)?((root|npz|h5)_tr(?:_(\d+))?\.py)(?=\s|$)"
+)
+
+
+def _flag_value(exe: str, name: str) -> str | None:
+    """Parse --flag / --no-flag and explicit true/false spellings."""
+    # Explicit value wins if present.
+    m = re.search(
+        rf"--{re.escape(name)}(?:=|\s+)(true|false|1|0|yes|no)(?=\s|$)",
+        exe,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        value = m.group(1).lower()
+        return "true" if value in {"true", "1", "yes"} else "false"
+
+    if re.search(rf"(?:^|\s)--no-{re.escape(name)}(?=\s|$)", exe):
+        return "false"
+
+    if re.search(rf"(?:^|\s)--{re.escape(name)}(?=\s|$)", exe):
+        return "true"
+
+    return None
+
+
 def coords_from_exe(exe: str) -> dict:
-    out = {}
+    exe = exe or ""
+
+    # Keep a stable schema: every known coordinate is present even when the
+    # corresponding option was not used by a particular workload.
+    out = {
+        "fmt": None,
+        "script": None,
+        "script_variant": None,
+    }
+
+    script_match = SCRIPT_RE.search(exe)
+    if script_match:
+        script = script_match.group(1)
+        prefix = script_match.group(2)
+        variant = script_match.group(3)
+
+        out["script"] = script
+        out["script_variant"] = variant
+        out["fmt"] = {
+            "root": "root",
+            "npz": "npz",
+            "h5": "hdf5",
+        }[prefix]
 
     for key, pat in EXE_ARGS.items():
-        m = re.search(pat, exe or "")
+        m = re.search(pat, exe)
         out[key] = m.group(1) if m else None
+
+    out["shuffle"] = _flag_value(exe, "shuffle")
+    out["persistent_workers"] = _flag_value(exe, "persistent-workers")
 
     return out
 
