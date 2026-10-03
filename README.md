@@ -88,9 +88,9 @@ A **case** is a single invocation of the workload: `workers_<N>` for each
 - `analyze` reads the run's `config.yaml` snapshot, not the live
   `campaign.yaml`. CLI flags can only narrow what that snapshot enables.
 
-## Current limitations (schema v1)
+## Current limitations and Future work (schema v1)
 
-Several limits are deliberate at this stage of development:
+Several limits are deliberate at this stage of development, and still in development for Darshanflow later iterations:
 
 - **Ignored on purpose:**
   - `darshan.config.rank_include` / `rank_exclude` are validated but never
@@ -118,6 +118,8 @@ Several limits are deliberate at this stage of development:
 ## End-to-end example
 
 The following example shows a complete HDF5 campaign running on a Slurm system.
+
+![DarshanFlowArch](figs/darshanflow-arch.png)
 
 ### 1. Initialize the campaign
 
