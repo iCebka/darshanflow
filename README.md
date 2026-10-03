@@ -10,9 +10,40 @@ Everything is built around a **campaign**: a directory holding one experiment
 description (`campaign.yaml`) plus everything produced from it (launchers, runs,
 logs, metrics). The tool has no global state. A campaign is just a folder.
 
-```
-init  →  edit campaign.yaml  →  build  →  run  →  analyze
-```
+
+![DarshanFlowArch](figs/darshanflow-arch.png)
+
+## Contents
+
+- [Layout](#layout)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Resulting campaign structure](#resulting-campaign-structure)
+- [Key rules](#key-rules)
+- [Current limitations and Future work (schema v1)](#current-limitations-and-future-work-schema-v1)
+- [End-to-end example](#end-to-end-example)
+  - [1. Initialize the campaign](#1-initialize-the-campaign)
+  - [2. Add the workload and dataset](#2-add-the-workload-and-dataset)
+  - [3. Configure the experiment](#3-configure-the-experiment)
+    - [Workload and dataset](#workload-and-dataset)
+    - [Experiment arguments and sweep](#experiment-arguments-and-sweep)
+    - [Execution environment](#execution-environment)
+    - [Darshan instrumentation](#darshan-instrumentation)
+    - [Execution backend](#execution-backend)
+    - [Post-experiment analysis](#post-experiment-analysis)
+  - [4. Build the campaign](#4-build-the-campaign)
+  - [5. Inspect execution with `--dry-run`](#5-inspect-execution-with---dry-run)
+  - [6. Submit the experiment](#6-submit-the-experiment)
+  - [7. Analyze the completed run](#7-analyze-the-completed-run)
+- [Troubleshooting](#troubleshooting)
+  - [PyDarshan and `libdarshan-util` version mismatch](#pydarshan-and-libdarshan-util-version-mismatch)
+  - [`run` cannot find a build, or the build became stale](#run-cannot-find-a-build-or-the-build-became-stale)
+  - [The Slurm job was submitted, but the run is incomplete](#the-slurm-job-was-submitted-but-the-run-is-incomplete)
+  - [The workload ran, but no Darshan logs were produced](#the-workload-ran-but-no-darshan-logs-were-produced)
+  - [Darshan logs exist, but expected records are missing](#darshan-logs-exist-but-expected-records-are-missing)
+  - [More `.darshan` files than expected](#more-darshan-files-than-expected)
+  - [Metrics or plots requested from the CLI are missing](#metrics-or-plots-requested-from-the-cli-are-missing)
+  - [The launcher reports success even though the workload failed](#the-launcher-reports-success-even-though-the-workload-failed)
 
 ## Layout
 
@@ -119,7 +150,6 @@ Several limits are deliberate at this stage of development, and still in develop
 
 The following example shows a complete HDF5 campaign running on a Slurm system.
 
-![DarshanFlowArch](figs/darshanflow-arch.png)
 
 ### 1. Initialize the campaign
 
@@ -144,7 +174,7 @@ campaign/
 └── scripts/
 ```
 
-## 2. Add the workload and dataset
+### 2. Add the workload and dataset
 
 Place the training program under `scripts/` and the input dataset under `data/`.
 
@@ -424,7 +454,7 @@ These settings are stored with the run and later used by `analyze`, so analysis
 is tied to the same configuration snapshot that produced the experiment.
 
 
-## 4. Build the campaign
+### 4. Build the campaign
 
 Before execution, the campaign must be built:
 
@@ -462,7 +492,7 @@ The generated file translates the relevant YAML options into Darshan runtime
 configuration such as DXT modules, record limits, path filters, application
 filters, and DXT small-I/O settings.
 
-## 5. Inspect execution with `--dry-run`
+### 5. Inspect execution with `--dry-run`
 
 Before submitting the job, the exact launcher can be checked without executing
 anything:
@@ -475,7 +505,7 @@ python3 ../cli.py run . --target slurm --dry-run
 DarshanFlow resolves the build corresponding to the current campaign and shows
 the command that would be executed.
 
-## 6. Submit the experiment
+### 6. Submit the experiment
 
 Submit the campaign with:
 
@@ -504,7 +534,7 @@ During execution, raw Darshan logs are stored separately for each case.
 Multiple `.darshan` files may be produced for one case because the parent Python
 process and DataLoader worker processes are instrumented independently.
 
-## 7. Analyze the completed run
+### 7. Analyze the completed run
 
 After the Slurm job has finished, analyze the run with:
 
