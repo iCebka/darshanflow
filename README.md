@@ -53,7 +53,6 @@ logs, metrics). The tool has no global state. A campaign is just a folder.
 | `darshanflow/`  | Lifecycle stages: campaign, config, builder, runner, analysis. See [darshanflow/README.md](darshanflow/README.md). |
 | `darshanflow/post/` | Post-processing: log simplification and the five metrics. See [darshanflow/post/README.md](darshanflow/post/README.md). |
 | `schema1.yaml`  | Annotated reference example of the schema-v1 `campaign.yaml`.         |
-| `CLAUDES/`      | The prompts that produced the current code. See [CLAUDES/README.md](CLAUDES/README.md). |
 
 ## Requirements
 
