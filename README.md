@@ -11,7 +11,7 @@ description (`campaign.yaml`) plus everything produced from it (launchers, runs,
 logs, metrics). The tool has no global state. A campaign is just a folder.
 
 
-![DarshanFlowArch](figs/darshanflow-arch.png)
+![DarshanFlowArch](figs/darshanflow-arch.jpg)
 
 ## Contents
 
