@@ -3,4 +3,3 @@ darshan==3.5.0
 matplotlib==3.11.1
 numpy==2.5.2
 pandas==3.0.5
-h5py==3.16.0
