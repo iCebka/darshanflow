@@ -56,9 +56,33 @@ logs, metrics). The tool has no global state. A campaign is just a folder.
 
 ## Requirements
 
-- Python 3.10+ with `pyyaml`
-- To run experiments: `bash`, a Darshan build (`libdarshan.so`), and `sbatch`/`srun` for Slurm
-- To analyze: `darshan-parser` on `PATH`, the Python `darshan` package (PyDarshan), and `matplotlib` (for graphs only)
+### Core DarshanFlow dependencies
+- Python 3.10+.
+- PyYAML==6.0.3
+- darshan==3.5.0
+- matplotlib==3.11.1
+- numpy==2.5.2
+- numpy==2.5.2
+- pandas==3.0.5
+
+Install them with
+```
+python -m pip install -r requirements.txt
+```
+
+### Format-specific dependencies
+- h5py==3.16.0
+- pyROOT==6.40.00
+
+These dependencies are only required when working with the corresponding data formats.
+
+### Environment
+DarshanFlow was developed and tested on an HPC system using:
+- Darshan/libdarshan-util 3.5.0
+- Slurm 25.11.8
+
+Slurm is only used for the Slurm execution backend. Local execution does not require Slurm.
+
 
 ## Quick start
 
