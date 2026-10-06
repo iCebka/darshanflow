@@ -62,7 +62,6 @@ logs, metrics). The tool has no global state. A campaign is just a folder.
 - darshan==3.5.0
 - matplotlib==3.11.1
 - numpy==2.5.2
-- numpy==2.5.2
 - pandas==3.0.5
 
 Install them with
