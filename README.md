@@ -659,7 +659,7 @@ During JSON conversion, analysis may fail with an error similar to:
 ```text
 FAILED: JSON conversion of <log>.darshan failed with exit code 1:
 darshan.discover_darshan.DarshanVersionError:
-This version of PyDarshan requires lib 3.4.6.
+This version of PyDarshan requires libdarshan-util 3.5.0, but found 3.4.6.
 ```
 
 This error comes from the analysis environment. PyDarshan requires a compatible version of `libdarshan-util` and refuses to load a different one.
