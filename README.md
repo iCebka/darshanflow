@@ -672,6 +672,272 @@ Here is the status of the directory of the described example at the end of the l
 18 directories, 46 files
 ```
 
+
+## Running a campaign locally
+
+Local execution runs each case with `python3` through a Bash launcher, without
+Slurm, `sbatch`, or `srun`. Run the commands below from the repository root.
+
+### Prepare the local environment
+
+Install the Python dependencies listed under [Requirements](#requirements):
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+You need Bash, a separately installed Darshan runtime (`libdarshan.so`) with
+non-MPI support, and your workload's dependencies, such as `torch` and `h5py`.
+The Python requirements do not install the runtime. Analysis requires
+`darshan-parser` on `PATH` and PyDarshan with a compatible `libdarshan-util`;
+see [version-mismatch troubleshooting](#pydarshan-and-libdarshan-util-version-mismatch).
+
+### Create and configure a local campaign
+
+```bash
+python3 cli.py init local-campaign
+cp /path/to/hdf5_tr.py local-campaign/scripts/
+cp /path/to/dataset.h5 local-campaign/data/
+```
+
+Supply your own script and dataset; neither is included in the repository.
+The script must accept `--data-path` and, for worker sweeps, `--num-workers`.
+In `local-campaign/campaign.yaml`, replace the sections below and keep the
+remaining starter settings, including the complete Darshan configuration and
+analysis toggles. Relative paths resolve against the campaign directory.
+
+```yaml
+workload:
+  type: python
+  script: scripts/hdf5_tr.py
+
+dataset:
+  format: hdf5
+  path: data/dataset.h5
+
+execution:
+  local:
+    enabled: true
+  slurm:
+    enabled: false
+
+experiment:
+  strategy: eager
+  model: M2
+  batch_size: 16
+  epochs: 1
+  log_every: 500
+  persistent_workers: true
+
+sweep:
+  num_workers: [1, 2]
+```
+
+With Slurm disabled, its resource and account settings are unnecessary.
+Local runs use available resources without reserving CPUs or enforcing Slurm
+wall-time limits. Keep only experiment arguments your script accepts:
+`batch_size` becomes `--batch-size`, and `true` passes a bare flag. This sweep
+runs `workers_1` followed by `workers_2`. Remove `sweep` to run once without
+`--num-workers`.
+
+```yaml
+environment:
+  venv: null
+  variables:
+    OMP_NUM_THREADS: 1
+    MKL_NUM_THREADS: 1
+    OPENBLAS_NUM_THREADS: 1
+    NUMEXPR_NUM_THREADS: 1
+  setup:
+    local: []
+    slurm: []
+  sanity_imports: [torch, h5py]
+```
+
+`venv: null` uses the inherited `python3`. To activate a virtual environment,
+set `venv` to its directory using an absolute or campaign-relative path, and
+install the workload dependencies there. Commands in `setup.local` run before
+venv activation, variable exports, and diagnostic imports. Adjust
+`sanity_imports` to your workload.
+
+In `darshan`, keep `enabled: true` and `nonmpi: true`, set `library` to your
+local runtime path, and keep the complete generated `config` block. Use
+`dxt: true` for DXT tracing. Check `config.name_exclude`: the starter filters
+exclude `/tmp` and several cluster paths. Remove exclusions matching your
+dataset before building.
+
+### Build and launch locally
+
+```bash
+python3 cli.py build local-campaign --target local
+python3 cli.py run local-campaign --target local --dry-run
+python3 cli.py run local-campaign --target local
+```
+
+The build validates the configuration and creates
+`launchers/build-<ID>/local.sh`, a configuration snapshot, and
+`darshan_env.conf` in generated mode. Rebuild after any `campaign.yaml` change,
+including comments. `--dry-run` checks the matching bundle and prints its Bash
+command; it does not run setup, check script or dataset existence, or test
+Darshan loading. Execution streams output and waits for the launcher to finish.
+
+### Inspect and analyze the local run
+
+The launcher prints the run ID and output directory. For this sweep, the run
+contains these files and directories (`analysis/` is created by `analyze`):
+
+```text
+local-campaign/runs/hdf5_<YYYYMMDD_HHMMSS>/
+├── config.yaml  launcher.sh  darshan_env.conf
+├── logs/workers_1.txt  logs/workers_2.txt
+├── darshan_logs/workers_1/  darshan_logs/workers_2/
+└── analysis/workers_1/  analysis/workers_2/
+```
+
+Check workload output and the `.darshan` files for each case before analysis.
+A successful launcher status can hide workload errors; see
+[launcher-status troubleshooting](#the-launcher-reports-success-even-though-the-workload-failed).
+Activate your analysis environment first: `analyze` uses its calling environment
+and does not activate the campaign's `environment.venv`.
+
+```bash
+python3 cli.py analyze local-campaign --run latest
+# Alternatively, compute enabled metrics without plots:
+python3 cli.py analyze local-campaign --run latest --graphs none
+```
+
+The run's `config.yaml` snapshot selects metrics and graphs. For a workload-only
+check, set `darshan.enabled: false`, rebuild, and run locally; this produces
+workload output but no Darshan logs and cannot be processed by `analyze`.
+
+## Standalone analysis and post-processing
+
+Use `darshanflow/post/` directly to process logs from another launcher or
+recompute metrics from JSON. No campaign directory, YAML, manifest, or
+`init` / `build` / `run` steps are needed. `cli.py analyze` still requires a
+campaign and a run configuration snapshot. Run these examples from the
+repository root; outputs go under `manual-analysis/`.
+
+### Choose the input stage
+
+| Input | Start at |
+|-------|----------|
+| Raw `*.darshan` logs | Completeness check and JSON conversion |
+| Exported `*.darshan.json` | Simplification and POSIX filtering |
+| `simplified.json` from `simplify_logs.py` | Metric modules |
+
+Raw conversion requires PyDarshan and a compatible `libdarshan-util`;
+completeness checks require `darshan-parser` on `PATH`. JSON simplification
+and CSV metrics use Python's standard library. Graphs require Matplotlib.
+See [Requirements](#requirements) for installation and compatibility.
+
+Keep each workload invocation's parent and worker logs together, with separate
+input and output directories for different cases. Preserve original filenames:
+the simplifier uses `_id<PPID>-<PID>_` and job metadata to group processes and
+identify workers.
+
+### Check and convert existing Darshan logs
+
+Set `LOG_DIR` to the raw-log directory for one case:
+
+```bash
+LOG_DIR=/absolute/path/to/one-case-logs
+mkdir -p manual-analysis/checks manual-analysis/json
+
+for log in "$LOG_DIR"/*.darshan; do
+    [ -f "$log" ] || continue
+    darshan-parser --show-incomplete "$log" \
+        > "manual-analysis/checks/$(basename "$log").txt"
+done
+```
+
+Confirm that logs were found and review parser errors and reports.
+`module contains incomplete data` indicates incomplete instrumentation;
+this loop reports it without automatically rejecting the logs. Convert the
+usable logs:
+
+```bash
+for log in "$LOG_DIR"/*.darshan; do
+    [ -f "$log" ] || continue
+    python3 -m darshan to_json "$log" \
+        > "manual-analysis/json/$(basename "$log").json"
+done
+```
+
+Verify each conversion: failures can leave empty or partial JSON. The original
+basenames produce the `*.darshan.json` pattern required by the simplifier;
+raw files are unchanged.
+
+### Simplify and filter the JSON logs
+
+```bash
+mkdir -p manual-analysis
+python3 -m darshanflow.post.simplify_logs manual-analysis/json \
+    --include 'dataset\.h5$' \
+    --output manual-analysis/simplified.json
+```
+
+For existing JSON, skip the raw-log steps and replace `manual-analysis/json`
+with its directory. The simplifier searches recursively for `*.darshan.json`.
+`--include` matches recorded file paths; change the regex to match your dataset,
+or omit it to keep all POSIX records. `--exclude '__pycache__'` removes matches
+after inclusion.
+
+Check the summary for expected logs and retained records. Unreadable logs or
+empty filter matches produce warnings but may still yield an output.
+`simplified.json` contains named POSIX counters, process roles, and experiment
+arguments from the recorded workload command line.
+
+### Run selected metrics and graphs
+
+Run any subset of these commands:
+
+```bash
+python3 -m darshanflow.post.io_intensity manual-analysis/simplified.json \
+    --outdir manual-analysis/io
+python3 -m darshanflow.post.access_pattern manual-analysis/simplified.json \
+    --outdir manual-analysis/access
+python3 -m darshanflow.post.metadata_pressure manual-analysis/simplified.json \
+    --outdir manual-analysis/metadata
+python3 -m darshanflow.post.effective_read manual-analysis/simplified.json \
+    --outdir manual-analysis/bandwidth
+python3 -m darshanflow.post.worker_balance manual-analysis/simplified.json \
+    --outdir manual-analysis/balance
+```
+
+Plots are off by default. The first four modules write `file_metrics.csv`,
+`proc_metrics.csv`, and `run_metrics.csv`. `worker_balance` writes process and
+run CSVs, computing balance from workers and retaining parent rows for context.
+
+All modules except `io_intensity` accept `--compact-graphs true` and/or
+`--individual-graphs true`:
+
+```bash
+python3 -m darshanflow.post.effective_read manual-analysis/simplified.json \
+    --outdir manual-analysis/bandwidth \
+    --compact-graphs true --individual-graphs true
+```
+
+`io_intensity` uses `--graphs true`:
+
+```bash
+python3 -m darshanflow.post.io_intensity manual-analysis/simplified.json \
+    --outdir manual-analysis/io --graphs true
+```
+
+Graph flags are independent of campaign toggles. Use a fresh output directory
+when changing filters or options; the scripts overwrite results without clearing
+old CSVs or plots. You can also run a script by path from another directory:
+
+```bash
+python3 /path/to/DarshanFlow/darshanflow/post/effective_read.py \
+    /path/to/simplified.json --outdir /path/to/bandwidth-results
+```
+
+Use `--help` for all options and
+[darshanflow/post/README.md](darshanflow/post/README.md) for metric definitions
+and graph layouts. Metrics cover POSIX counters, excluding MPI-IO and DXT traces.
+
 ## Troubleshooting
 
 DarshanFlow is still under active development. When a campaign fails, first determine whether the problem happened during the build, workload execution, Darshan instrumentation, or post-processing. A run directory keeps the configuration snapshot, launcher, workload output, raw Darshan logs, and analysis output, so most problems can be investigated without modifying generated files.
