@@ -74,6 +74,7 @@ python -m pip install -r requirements.txt
 - pyROOT==6.40.00
 
 These dependencies are only required when working with the corresponding data formats.
+**Note for pyROOT**: when importing ROOT, always import before numpy to avoid compatibility problems while ROOT is being imported.
 
 ### Environment
 DarshanFlow was developed and tested on an HPC system using:
